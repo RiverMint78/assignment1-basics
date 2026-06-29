@@ -62,16 +62,20 @@ def chunk_iterator(file_path: str, end_token: str, chunk_cnt: int):
             yield chunk.replace("\r\n", "\n")  # Windows mismatch
 
 
-def _pretokenize_worker(chunk: str, end_token: str, special_tokens: list[str]) -> Counter:
-    pattern = "|".join([re.escape(token) for token in special_tokens])
-    text = re.sub(pattern, end_token, chunk)
-    res_cnter = Counter()
+def _pretokenize_worker(chunk: str, end_token: str, special_tokens: list[str]) -> Counter[tuple[int, ...]]:
+    if special_tokens:
+        pattern = "|".join(re.escape(token) for token in special_tokens)
+        text = re.sub(pattern, end_token, chunk)
+    else:
+        text = chunk
+    counter = Counter()
     for mini_chunk in text.split(end_token):
-        res_cnter += Counter(tuple(bytes([b]) for b in match.group().encode("utf-8")) for match in _PRETOKEN_PAT.finditer(mini_chunk))
-    return res_cnter
+        for match in _PRETOKEN_PAT.finditer(mini_chunk):
+            counter[tuple(match.group().encode("utf-8"))] += 1
+    return counter
 
 
-def pretokenize(file_path: str, end_token: str, special_tokens: list[str], chunk_cnt: int | None = None) -> Counter:
+def pretokenize(file_path: str, end_token: str, special_tokens: list[str], chunk_cnt: int | None = None) -> Counter[tuple[int, ...]]:
     if os.path.getsize(file_path) < 10_000_000:
         total = Counter()
         for chunk in chunk_iterator(file_path, end_token, 1):
@@ -80,15 +84,18 @@ def pretokenize(file_path: str, end_token: str, special_tokens: list[str], chunk
     chunk_cnt = chunk_cnt or min(os.cpu_count() or 1, 8)
     worker = partial(_pretokenize_worker, end_token=end_token, special_tokens=special_tokens)
     with Pool(processes=chunk_cnt) as pool:
-        return sum(pool.map(worker, chunk_iterator(file_path, end_token, chunk_cnt)), start=Counter())
+        total = Counter()
+        for c in pool.imap_unordered(worker, chunk_iterator(file_path, end_token, chunk_cnt), chunksize=1):
+            total.update(c)
+        return total
 
 
-def _merge_tuple(token_tuple: tuple[bytes, ...], merge_pair: tuple[bytes, bytes], merged: bytes) -> tuple[bytes, ...]:
+def _merge_tuple_ids(token_tuple: tuple[int, ...], merge_pair: tuple[int, int], merged_id: int) -> tuple[int, ...]:
     out = []
     i = 0
     while i < len(token_tuple):
         if i + 1 < len(token_tuple) and token_tuple[i] == merge_pair[0] and token_tuple[i + 1] == merge_pair[1]:
-            out.append(merged)
+            out.append(merged_id)
             i += 2
         else:
             out.append(token_tuple[i])
@@ -96,42 +103,44 @@ def _merge_tuple(token_tuple: tuple[bytes, ...], merge_pair: tuple[bytes, bytes]
     return tuple(out)
 
 
-def bpe_merge(word_cnter: Counter, vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    bpe_merges: list[tuple[bytes, bytes]] = []
+def bpe_merge(word_cnter: Counter[tuple[int, ...]], vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     words = list(word_cnter.keys())
     word_cnts = list(word_cnter.values())
 
-    # preprocess pairs
-    pair_cnts = Counter()
-    pair_to_words = defaultdict(set)
+    vocab_lst: list[bytes] = [bytes([i]) for i in range(256)]
+    merges_ids: list[tuple[int, int]] = []
 
-    for word_id, tokens in enumerate(words):
+    pair_cnts: Counter[tuple[int, int]] = Counter()
+    pair_to_words: dict[tuple[int, int], set[int]] = defaultdict(set)
+
+    for word_id, word in enumerate(words):
         cnt = word_cnts[word_id]
-        for pair in zip(tokens, tokens[1:]):
+        for pair in zip(word, word[1:]):
             pair_cnts[pair] += cnt
             pair_to_words[pair].add(word_id)
-
-    vocab_lst = [bytes([i]) for i in range(256)]
 
     while (len(vocab_lst) + len(special_tokens)) < vocab_size:
         if not pair_cnts:
             break
-        merge_pair: tuple[bytes, bytes] = max(pair_cnts.items(), key=lambda x: (x[1], x[0]))[0]
-        merged: bytes = merge_pair[0] + merge_pair[1]
-        bpe_merges.append(merge_pair)
-        vocab_lst.append(merged)
 
-        affected_word_ids = pair_to_words[merge_pair].copy()
+        merge_pair = max(pair_cnts, key=lambda p: (pair_cnts[p], vocab_lst[p[0]], vocab_lst[p[1]]))
+
+        merged_id = len(vocab_lst)
+        vocab_lst.append(vocab_lst[merge_pair[0]] + vocab_lst[merge_pair[1]])
+        merges_ids.append(merge_pair)
+
+        affected_word_ids = list(pair_to_words.get(merge_pair, set()))
 
         for word_id in affected_word_ids:
             old_word = words[word_id]
-            cnt = word_cnts[word_id]
 
             if merge_pair not in zip(old_word, old_word[1:]):
                 continue
 
+            cnt = word_cnts[word_id]
+            old_pairs = list(zip(old_word, old_word[1:]))
+
             # subtract old pairs
-            old_pairs = zip(old_word, old_word[1:])
             for pair in old_pairs:
                 pair_cnts[pair] -= cnt
                 if pair_cnts[pair] <= 0:
@@ -142,27 +151,30 @@ def bpe_merge(word_cnter: Counter, vocab_size: int, special_tokens: list[str]) -
                 word_set = pair_to_words.get(pair)
                 if word_set is not None:
                     word_set.discard(word_id)
+                    if not word_set:
+                        pair_to_words.pop(pair, None)
 
-            # merge
-            new_tuple = _merge_tuple(old_word, merge_pair, merged)
-            words[word_id] = new_tuple
+            new_word = _merge_tuple_ids(old_word, merge_pair, merged_id)
+            words[word_id] = new_word
 
             # add new pairs
-            for pair in zip(new_tuple, new_tuple[1:]):
+            for pair in zip(new_word, new_word[1:]):
                 pair_cnts[pair] += cnt
                 pair_to_words[pair].add(word_id)
 
-    for special_token in special_tokens:
-        vocab_lst.append(special_token.encode("utf-8"))
+    # append special tokens
+    for token in special_tokens:
+        vocab_lst.append(token.encode("utf-8"))
 
-    return {i: token for i, token in enumerate(vocab_lst)}, bpe_merges
+    merges = [(vocab_lst[a], vocab_lst[b]) for a, b in merges_ids]
+    return {i: token for i, token in enumerate(vocab_lst)}, merges
 
 
 def bpe_train(input_path: str, vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     return bpe_merge(pretokenize(input_path, end_token=special_tokens[0], special_tokens=special_tokens), vocab_size, special_tokens)
 
 
-def save_vocab(vocab: dict[int, bytes], output_path: str):
+def save_vocab_csv(vocab: dict[int, bytes], output_path: str):
     import csv
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -173,6 +185,13 @@ def save_vocab(vocab: dict[int, bytes], output_path: str):
     print(f"Vocab saved to {output_path} ({len(vocab)} tokens)")
 
 
+def save_tokenizer(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], output_path: str):
+    import pickle
+
+    with open(output_path, "wb") as f:
+        pickle.dump({"vocab": vocab, "merges": merges}, f)
+
+
 if __name__ == "__main__":
     vocab, merges = bpe_train(r"data/TinyStoriesV2-GPT4-valid.txt", 32000, [_END_TOKEN])
-    save_vocab(vocab, "tmp.vocab.csv")
+    save_vocab_csv(vocab, "tmp.vocab.csv")

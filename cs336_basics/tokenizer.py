@@ -62,21 +62,23 @@ def chunk_iterator(file_path: str, end_token: str, chunk_cnt: int):
             yield chunk.replace("\r\n", "\n")  # Windows mismatch
 
 
-def _pretokenize_worker(chunk: str, end_token: str) -> Counter:
+def _pretokenize_worker(chunk: str, end_token: str, special_tokens: list[str]) -> Counter:
+    pattern = "|".join([re.escape(token) for token in special_tokens])
+    text = re.sub(pattern, end_token, chunk)
     res_cnter = Counter()
-    for mini_chunk in chunk.split(end_token):
+    for mini_chunk in text.split(end_token):
         res_cnter += Counter(tuple(bytes([b]) for b in match.group().encode("utf-8")) for match in _PRETOKEN_PAT.finditer(mini_chunk))
     return res_cnter
 
 
-def pretokenize(file_path: str, end_token: str, chunk_cnt: int | None = None) -> Counter:
+def pretokenize(file_path: str, end_token: str, special_tokens: list[str], chunk_cnt: int | None = None) -> Counter:
     if os.path.getsize(file_path) < 10_000_000:
         total = Counter()
         for chunk in chunk_iterator(file_path, end_token, 1):
-            total += _pretokenize_worker(chunk, end_token)
+            total += _pretokenize_worker(chunk, end_token, special_tokens)
         return total
     chunk_cnt = chunk_cnt or min(os.cpu_count() or 1, 8)
-    worker = partial(_pretokenize_worker, end_token=end_token)
+    worker = partial(_pretokenize_worker, end_token=end_token, special_tokens=special_tokens)
     with Pool(processes=chunk_cnt) as pool:
         return sum(pool.map(worker, chunk_iterator(file_path, end_token, chunk_cnt)), start=Counter())
 
@@ -155,9 +157,20 @@ def bpe_merge(word_cnter: Counter, vocab_size: int, special_tokens: list[str]) -
 
 
 def bpe_train(input_path: str, vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    return bpe_merge(pretokenize(input_path, end_token=special_tokens[0]), vocab_size, special_tokens)
+    return bpe_merge(pretokenize(input_path, end_token=special_tokens[0], special_tokens=special_tokens), vocab_size, special_tokens)
+
+
+def save_vocab(vocab: dict[int, bytes], output_path: str):
+    import csv
+
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["token_id", "bytes"])
+        for token_id in sorted(vocab.keys()):
+            writer.writerow([token_id, vocab[token_id]])
+    print(f"Vocab saved to {output_path} ({len(vocab)} tokens)")
 
 
 if __name__ == "__main__":
-    word_cnter = pretokenize(r"data/TinyStoriesV2-GPT4-valid.txt", _END_TOKEN)
-    bpe_merge(word_cnter, 1024, [_END_TOKEN])
+    vocab, merges = bpe_train(r"data/TinyStoriesV2-GPT4-vaild.txt", 32000, [_END_TOKEN])
+    save_vocab(vocab, "tmp.vocab.csv")

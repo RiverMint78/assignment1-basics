@@ -395,9 +395,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
     raise NotImplementedError
 
 
-def run_get_batch(
-    dataset: npt.NDArray, batch_size: int, context_length: int, device: str
-) -> tuple[torch.Tensor, torch.Tensor]:
+def run_get_batch(dataset: npt.NDArray, batch_size: int, context_length: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Given a dataset (a 1D numpy array of integers) and a desired batch size and
     context length, sample language modeling input sequences and their corresponding
@@ -434,9 +432,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
     raise NotImplementedError
 
 
-def run_cross_entropy(
-    inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]
-) -> Float[Tensor, ""]:
+def run_cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]) -> Float[Tensor, ""]:
     """Given a tensor of inputs and targets, compute the average cross-entropy
     loss across examples.
 
@@ -559,7 +555,9 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    from cs336_basics.tokenizer.bpe_tokenizer import BPETokenizer
+
+    return BPETokenizer(vocab, merges, special_tokens)
 
 
 def run_train_bpe(
@@ -590,4 +588,5 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     from cs336_basics.tokenizer.bpe_trainer import bpe_train
+
     return bpe_train(input_path, vocab_size, special_tokens)

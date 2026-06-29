@@ -3,6 +3,11 @@ import os
 import pickle
 from typing import BinaryIO
 
+import regex as re
+
+PRETOKEN_PAT = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+DEFAULT_END_TOKEN = "<|endoftext|>"
+
 
 def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special_token: bytes) -> list[int]:
     """
@@ -45,6 +50,14 @@ def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special
 
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
+
+
+def special_tokens_to_end_token(text: str, end_token: str, special_tokens: list[str]) -> str:
+    """replace all special_tokens to given end_token"""
+    if special_tokens:
+        pattern = "|".join(re.escape(token) for token in special_tokens)
+        text = re.sub(pattern, end_token, text)
+    return text
 
 
 def save_vocab_csv(vocab: dict[int, bytes], output_path: str):

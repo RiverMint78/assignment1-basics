@@ -2,14 +2,8 @@ import os
 from collections import Counter, defaultdict
 from functools import partial
 from multiprocessing import Pool
-from typing import BinaryIO
 
-import regex as re
-
-from .utils import find_chunk_boundaries, save_tokenizer, save_vocab_csv
-
-_PRETOKEN_PAT = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-_END_TOKEN = "<|endoftext|>"
+from .utils import DEFAULT_END_TOKEN, PRETOKEN_PAT, find_chunk_boundaries, save_tokenizer, save_vocab_csv, special_tokens_to_end_token
 
 
 def chunk_iterator(file_path: str, end_token: str, chunk_cnt: int):
@@ -22,19 +16,15 @@ def chunk_iterator(file_path: str, end_token: str, chunk_cnt: int):
 
 
 def _pretokenize_worker(chunk: str, end_token: str, special_tokens: list[str]) -> Counter[tuple[int, ...]]:
-    if special_tokens:
-        pattern = "|".join(re.escape(token) for token in special_tokens)
-        text = re.sub(pattern, end_token, chunk)
-    else:
-        text = chunk
+    text = special_tokens_to_end_token(chunk, end_token, special_tokens)
     counter = Counter()
-    for mini_chunk in text.split(end_token):
-        for match in _PRETOKEN_PAT.finditer(mini_chunk):
+    for text_chunk in text.split(end_token):
+        for match in PRETOKEN_PAT.finditer(text_chunk):
             counter[tuple(match.group().encode("utf-8"))] += 1
     return counter
 
 
-def pretokenize(file_path: str, end_token: str, special_tokens: list[str], chunk_cnt: int | None = None) -> Counter[tuple[int, ...]]:
+def get_pretoken_cnter(file_path: str, end_token: str, special_tokens: list[str], chunk_cnt: int | None = None) -> Counter[tuple[int, ...]]:
     if os.path.getsize(file_path) < 10_000_000:
         total = Counter()
         for chunk in chunk_iterator(file_path, end_token, 1):
@@ -132,9 +122,9 @@ def bpe_merge_cnter(
 
 
 def bpe_train(input_path: str, vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    return bpe_merge_cnter(pretokenize(input_path, end_token=special_tokens[0], special_tokens=special_tokens), vocab_size, special_tokens)
+    return bpe_merge_cnter(get_pretoken_cnter(input_path, end_token=special_tokens[0], special_tokens=special_tokens), vocab_size, special_tokens)
 
 
 if __name__ == "__main__":
-    vocab, merges = bpe_train(r"data/TinyStoriesV2-GPT4-valid.txt", 32000, [_END_TOKEN])
+    vocab, merges = bpe_train(r"data/TinyStoriesV2-GPT4-valid.txt", 32000, [DEFAULT_END_TOKEN])
     save_vocab_csv(vocab, "tmp.vocab.csv")

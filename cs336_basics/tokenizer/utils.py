@@ -1,12 +1,10 @@
+import csv
 import os
+import pickle
 from typing import BinaryIO
 
 
-def find_chunk_boundaries(
-    file: BinaryIO,
-    desired_num_chunks: int,
-    split_special_token: bytes,
-) -> list[int]:
+def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special_token: bytes) -> list[int]:
     """
     Chunk the file into parts that can be counted independently.
     May return fewer chunks if the boundaries end up overlapping.
@@ -49,14 +47,21 @@ def find_chunk_boundaries(
     return sorted(set(chunk_boundaries))
 
 
-## Usage
-with open(..., "rb") as f:
-    num_processes = 4
-    boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+def save_vocab_csv(vocab: dict[int, bytes], output_path: str):
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["token_id", "bytes"])
+        for token_id in sorted(vocab.keys()):
+            writer.writerow([token_id, vocab[token_id]])
+    print(f"Vocab saved to {output_path} ({len(vocab)} tokens)")
 
-    # The following is a serial implementation, but you can parallelize this
-    # by sending each start/end pair to a set of processes.
-    for start, end in zip(boundaries[:-1], boundaries[1:]):
-        f.seek(start)
-        chunk = f.read(end - start).decode("utf-8", errors="ignore")
-        # Run pre-tokenization on your chunk and store the counts for each pre-token
+
+def save_tokenizer(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], output_path: str):
+    with open(output_path, "wb") as f:
+        pickle.dump({"vocab": vocab, "merges": merges}, f)
+
+
+def load_tokenizer(input_path: str) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+    with open(input_path, "rb") as f:
+        data = pickle.load(f)
+        return data["vocab"], data["merges"]

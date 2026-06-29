@@ -114,6 +114,8 @@ def bpe_merge(word_cnter: Counter, vocab_size: int, special_tokens: list[str]) -
     vocab_lst = [bytes([i]) for i in range(256)]
 
     while (len(vocab_lst) + len(special_tokens)) < vocab_size:
+        if not pair_cnts:
+            break
         merge_pair: tuple[bytes, bytes] = max(pair_cnts.items(), key=lambda x: (x[1], x[0]))[0]
         merged: bytes = merge_pair[0] + merge_pair[1]
         bpe_merges.append(merge_pair)
@@ -172,5 +174,5 @@ def save_vocab(vocab: dict[int, bytes], output_path: str):
 
 
 if __name__ == "__main__":
-    vocab, merges = bpe_train(r"data/TinyStoriesV2-GPT4-vaild.txt", 32000, [_END_TOKEN])
+    vocab, merges = bpe_train(r"data/TinyStoriesV2-GPT4-valid.txt", 32000, [_END_TOKEN])
     save_vocab(vocab, "tmp.vocab.csv")

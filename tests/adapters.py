@@ -29,7 +29,13 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    from cs336_basics.layers import Linear
+
+    linear = Linear(in_features=d_in, out_features=d_out, device=in_features.device, dtype=in_features.dtype)
+    linear.load_state_dict({"weight": weights.T})
+    linear.eval()
+    with torch.inference_mode():
+        return linear.forward(in_features)
 
 
 def run_embedding(
@@ -50,8 +56,13 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
+    from cs336_basics.layers import Embedding
 
-    raise NotImplementedError
+    embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, device=weights.device, dtype=weights.dtype)
+    embedding.load_state_dict({"weight": weights})
+    embedding.eval()
+    with torch.inference_mode():
+        return embedding.forward(token_ids)
 
 
 def run_swiglu(
@@ -83,7 +94,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    from cs336_basics.layers import SwiGLU
+
+    swiglu = SwiGLU(d_model=d_model, d_ff=d_ff, device=in_features.device, dtype=in_features.dtype)
+    swiglu.w1.weight.data.copy_(w1_weight.T)
+    swiglu.w2.weight.data.copy_(w2_weight.T)
+    swiglu.w3.weight.data.copy_(w3_weight.T)
+    return swiglu.forward(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -200,7 +217,10 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    from cs336_basics.attention import RotaryPositionalEmbedding
+
+    rope = RotaryPositionalEmbedding(theta=theta, d_k=d_k, max_seq_len=max_seq_len, device=in_query_or_key.device)
+    return rope(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -378,7 +398,13 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.layers import RMSNorm
+
+    rmsnorm = RMSNorm(d_model=d_model, eps=eps, device=in_features.device, dtype=in_features.dtype)
+    rmsnorm.load_state_dict({"weight": weights})
+    rmsnorm.eval()
+    with torch.inference_mode():
+        return rmsnorm.forward(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -392,7 +418,10 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    from cs336_basics.layers import SiLU
+
+    silu = SiLU()
+    return silu.forward(in_features)
 
 
 def run_get_batch(dataset: npt.NDArray, batch_size: int, context_length: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
@@ -429,7 +458,9 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    from cs336_basics.nn_utils import softmax
+
+    return softmax(in_features, dim)
 
 
 def run_cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]) -> Float[Tensor, ""]:

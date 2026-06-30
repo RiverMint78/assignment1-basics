@@ -2,7 +2,7 @@ from collections.abc import Iterable, Iterator
 
 import regex as re
 
-from .utils import DEFAULT_END_TOKEN, PRETOKEN_PAT, load_tokenizer
+from cs336_basics.tokenizer.utils import DEFAULT_END_TOKEN, PRETOKEN_PAT, load_tokenizer
 
 
 class BPETokenizer:
@@ -35,7 +35,8 @@ class BPETokenizer:
         vocab, merges = load_tokenizer(tokenizer_filepath)
         return BPETokenizer(vocab, merges, special_tokens)
 
-    def _bpe_encode_bytes(self, token_bytes: tuple[bytes, ...]) -> list[int]:
+    def _bpe_encode_bytes(self, token_bytes: bytes) -> list[int]:
+        token_bytes = [bytes([b]) for b in token_bytes]
         while len(token_bytes) > 1:
             pairs = list(zip(token_bytes, token_bytes[1:]))
             best_pair = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
@@ -56,7 +57,7 @@ class BPETokenizer:
     def _encode_normal_text(self, text: str) -> list[int]:
         tokens_ids = []
         for match in PRETOKEN_PAT.finditer(text):
-            token_bytes = tuple(bytes([b]) for b in match.group().encode("utf-8"))
+            token_bytes = match.group().encode("utf-8")
             tokens_ids.extend(self._bpe_encode_bytes(token_bytes))
         return tokens_ids
 

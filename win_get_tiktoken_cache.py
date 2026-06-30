@@ -4,7 +4,7 @@ import pathlib
 import shutil
 
 cache = pathlib.Path(r"./tiktoken_cache")
-fixture = pathlib.Path(r"./tests\fixtures")
+fixture = pathlib.Path(r"./tests/fixtures")
 cache.mkdir(parents=True, exist_ok=True)
 
 urls = {

@@ -166,3 +166,4 @@ uv.lock
 tmp/
 tmp.*
 data
+*_cache

@@ -4,6 +4,7 @@ import einx
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+from torch import Tensor
 
 from cs336_basics.nn_utils import silu
 
@@ -20,7 +21,7 @@ class Linear(nn.Module):
         sigma = math.sqrt(2.0 / (self.in_features + self.out_features))
         init.trunc_normal_(self.weight, std=sigma, a=-3.0 * sigma, b=3.0 * sigma)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         return x @ self.weight
 
 
@@ -35,7 +36,7 @@ class Embedding(nn.Module):
     def reset_parameters(self) -> None:
         init.trunc_normal_(self.weight, std=1.0, a=-3.0, b=3.0)
 
-    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, token_ids: Tensor) -> Tensor:
         return self.weight[token_ids]
 
 
@@ -49,7 +50,7 @@ class RMSNorm(nn.Module):
     def reset_parameters(self) -> None:
         init.ones_(self.weight)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         in_dtype = x.dtype
         x_fp32 = x.to(torch.float32)
         rms = torch.rsqrt(einx.mean("... d -> ... 1", x_fp32.square()) + self.eps)
@@ -61,7 +62,7 @@ class SiLU(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         return silu(x)
 
 
@@ -80,5 +81,5 @@ class SwiGLU(nn.Module):
         self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
         self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         return self.w2(silu(self.w1(x)) * self.w3(x))

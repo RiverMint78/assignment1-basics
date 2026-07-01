@@ -31,8 +31,8 @@ optimizer:
   cosine_cycle_iters: 5000
 
 training:
-  batch_size: 256
-  grad_accum_steps: 1
+  batch_size: 128
+  grad_accum_steps: 2
   max_steps: 5000
   log_interval: 10
   eval_interval: 250

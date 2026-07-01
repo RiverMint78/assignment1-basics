@@ -14,7 +14,6 @@ import yaml
 from torch.utils.tensorboard import SummaryWriter
 
 from cs336_basics.data import get_batch
-from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.optim import AdamW, get_lr_cosine_schedule, gradient_clipping
 from cs336_basics.serialization import load_checkpoint, save_checkpoint
 from cs336_basics.transformer import TransformerLM
@@ -191,7 +190,10 @@ def main() -> None:
             )
 
             logits = model(x)
-            loss = cross_entropy(logits, y)
+            loss = F.cross_entropy(
+                logits.reshape(-1, logits.size(-1)),
+                y.reshape(-1),
+            )
 
             # Keep effective gradient scale independent of grad_accum_steps.
             (loss / grad_accum_steps).backward()

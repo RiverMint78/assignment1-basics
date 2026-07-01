@@ -313,7 +313,31 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer import TransformerBlock
+
+    tf_blk = TransformerBlock(
+        d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=max_seq_len, theta=theta, device=in_features.device, dtype=in_features.dtype
+    )
+
+    # Attention proj
+    tf_blk.attn.q_proj.weight.data.copy_(weights["attn.q_proj.weight"].T)
+    tf_blk.attn.k_proj.weight.data.copy_(weights["attn.k_proj.weight"].T)
+    tf_blk.attn.v_proj.weight.data.copy_(weights["attn.v_proj.weight"].T)
+    tf_blk.attn.output_proj.weight.data.copy_(weights["attn.output_proj.weight"].T)
+
+    # RMSNorm
+    tf_blk.ln1.weight.data.copy_(weights["ln1.weight"])
+    tf_blk.ln2.weight.data.copy_(weights["ln2.weight"])
+
+    # SwiGLU FFN
+    tf_blk.ffn.w1.weight.data.copy_(weights["ffn.w1.weight"].T)
+    tf_blk.ffn.w2.weight.data.copy_(weights["ffn.w2.weight"].T)
+    tf_blk.ffn.w3.weight.data.copy_(weights["ffn.w3.weight"].T)
+
+    seq_len = in_features.shape[-2]
+    token_positions = torch.arange(seq_len, device=in_features.device, dtype=torch.long)
+
+    return tf_blk(in_features, token_positions=token_positions)
 
 
 def run_transformer_lm(
@@ -395,7 +419,45 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer import TransformerLM
+
+    param_dtype = next(iter(weights.values())).dtype
+    device = in_indices.device
+
+    model = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+        device=device,
+        dtype=param_dtype,
+    )
+
+    model.token_embeddings.weight.data.copy_(weights["token_embeddings.weight"])
+
+    for layer_idx in range(num_layers):
+        layer = model.layers[layer_idx]
+        prefix = f"layers.{layer_idx}"
+
+        layer.attn.q_proj.weight.data.copy_(weights[f"{prefix}.attn.q_proj.weight"].T)
+        layer.attn.k_proj.weight.data.copy_(weights[f"{prefix}.attn.k_proj.weight"].T)
+        layer.attn.v_proj.weight.data.copy_(weights[f"{prefix}.attn.v_proj.weight"].T)
+        layer.attn.output_proj.weight.data.copy_(weights[f"{prefix}.attn.output_proj.weight"].T)
+
+        layer.ln1.weight.data.copy_(weights[f"{prefix}.ln1.weight"])
+        layer.ln2.weight.data.copy_(weights[f"{prefix}.ln2.weight"])
+
+        layer.ffn.w1.weight.data.copy_(weights[f"{prefix}.ffn.w1.weight"].T)
+        layer.ffn.w2.weight.data.copy_(weights[f"{prefix}.ffn.w2.weight"].T)
+        layer.ffn.w3.weight.data.copy_(weights[f"{prefix}.ffn.w3.weight"].T)
+
+    model.ln_final.weight.data.copy_(weights["ln_final.weight"])
+    model.lm_head.weight.data.copy_(weights["lm_head.weight"].T)
+
+    return model(in_indices)
 
 
 def run_rmsnorm(

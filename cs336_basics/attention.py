@@ -2,8 +2,6 @@ import einx
 import torch
 import torch.nn as nn
 
-from cs336_basics.layers import Linear
-
 
 class RotaryPositionalEmbedding(nn.Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device: torch.device | None = None) -> None:
@@ -26,14 +24,12 @@ class RotaryPositionalEmbedding(nn.Module):
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
         x_fp32 = x.to(torch.float32)
-        x_even = x_fp32[..., 0::2]
-        x_odd = x_fp32[..., 1::2]
-        cos = self.cos_cached[token_positions]  # [..., L, d_k / 2]
-        sin = self.sin_cached[token_positions]  # [..., L, d_k / 2]
-        while cos.ndim < x_even.ndim:
-            cos = cos.unsqueeze(-3)
-            sin = sin.unsqueeze(-3)
-        out_even = x_even * cos - x_odd * sin
-        out_odd = x_even * sin + x_odd * cos
-        out = torch.stack((out_even, out_odd), dim=-1).flatten(-2)
+        x_even, x_odd = einx.id("... (d (1 + 1)) -> ... d, ... d", x_fp32)
+        cos = self.cos_cached[token_positions]  # [..., in_seq_len, d_k / 2]
+        sin = self.sin_cached[token_positions]  # [..., in_seq_len, d_k / 2]
+        mul = r"b... p... l d, b... l d -> b... p... l d"
+        out_even = einx.multiply(mul, x_even, cos) - einx.multiply(mul, x_odd, sin)
+        out_odd = einx.multiply(mul, x_even, sin) + einx.multiply(mul, x_odd, cos)
+        out_pair = einx.id("..., ... -> ... (1 + 1)", out_even, out_odd)
+        out = einx.id("... d two -> ... (d two)", out_pair)
         return out.to(in_dtype)

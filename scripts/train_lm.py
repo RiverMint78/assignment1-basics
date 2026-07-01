@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
@@ -70,7 +71,10 @@ def estimate_loss(
             device=device,
         )
         logits = model(x)
-        loss = cross_entropy(logits, y)
+        loss = F.cross_entropy(
+            logits.reshape(-1, logits.size(-1)),
+            y.reshape(-1),
+        )
         losses.append(float(loss.item()))
 
     model.train()

@@ -1,0 +1,44 @@
+run:
+  seed: 42
+  device: cpu
+  dtype: float32
+  log_dir: runs/tinystories_debug
+  compile: false
+  allow_tf32: true
+
+data:
+  train_path: data/TinyStoriesV2-GPT4-train.uint16.npy
+  valid_path: data/TinyStoriesV2-GPT4-valid.uint16.npy
+
+model:
+  vocab_size: 32000
+  context_length: 64
+  d_model: 128
+  num_layers: 1
+  num_heads: 16
+  d_ff: 320
+  rope_theta: 10000.0
+
+optimizer:
+  lr: 0.0003
+  min_lr: 0.00003
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  eps: 0.00000001
+  max_grad_norm: 1.0
+  warmup_iters: 500
+  cosine_cycle_iters: 5000
+
+training:
+  batch_size: 32
+  grad_accum_steps: 8
+  max_steps: 5000
+  log_interval: 10
+  eval_interval: 250
+  eval_iters: 20
+  checkpoint_interval: 1000
+
+checkpoint:
+  output_dir: checkpoints/tinystories_debug
+  resume_from: null

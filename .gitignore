@@ -167,3 +167,6 @@ tmp/
 tmp.*
 data
 *_cache
+
+runs/
+checkpoints/

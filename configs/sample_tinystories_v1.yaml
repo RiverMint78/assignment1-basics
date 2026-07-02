@@ -1,0 +1,28 @@
+run:
+  seed: 42
+  device: cuda
+  dtype: float32
+  allow_tf32: true
+
+model:
+  vocab_size: 32000
+  context_length: 256
+  d_model: 512
+  num_layers: 4
+  num_heads: 16
+  d_ff: 1344
+  rope_theta: 10000.0
+
+checkpoint:
+  path: checkpoints/tinystories_32k/final.pt
+
+tokenizer:
+  path: data/TinyStoriesV2.tokenizer.pkl
+  eos_token: "<|endoftext|>"
+
+generation:
+  prompt: "Once upon a time"
+  max_new_tokens: 200
+  temperature: 0.8
+  top_k: 50
+  stop_at_eos: true

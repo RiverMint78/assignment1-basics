@@ -40,6 +40,24 @@ class Embedding(nn.Module):
         return self.weight[token_ids]
 
 
+# class RMSNorm(nn.Module):
+#     def __init__(self, d_model: int, eps: float = 1e-5, device: torch.device | None = None, dtype: torch.dtype | None = None) -> None:
+#         super().__init__()
+#         self.d_model = d_model
+#         self.eps = eps
+#         self.weight = nn.Parameter(torch.ones((d_model,), device=device, dtype=dtype))
+
+#     def reset_parameters(self) -> None:
+#         init.ones_(self.weight)
+
+#     def forward(self, x: Tensor) -> Tensor:
+#         in_dtype = x.dtype
+#         x_fp32 = x.to(torch.float32)
+#         rms = torch.rsqrt(einx.mean("... d -> ... 1", x_fp32.square()) + self.eps)
+#         out = einx.multiply("... d, ... 1, d -> ... d", x_fp32, rms, self.weight)
+#         return out.to(in_dtype)
+
+
 class RMSNorm(nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5, device: torch.device | None = None, dtype: torch.dtype | None = None) -> None:
         super().__init__()
@@ -52,9 +70,9 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         in_dtype = x.dtype
-        x_fp32 = x.to(torch.float32)
-        rms = torch.rsqrt(einx.mean("... d -> ... 1", x_fp32.square()) + self.eps)
-        out = einx.multiply("... d, ... 1, d -> ... d", x_fp32, rms, self.weight)
+        x_fp32 = x.float()
+        rms = torch.rsqrt(x_fp32.square().mean(dim=-1, keepdim=True) + self.eps)
+        out = x_fp32 * rms * self.weight
         return out.to(in_dtype)
 
 

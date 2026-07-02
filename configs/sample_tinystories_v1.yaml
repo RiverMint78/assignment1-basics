@@ -14,7 +14,7 @@ model:
   rope_theta: 10000.0
 
 checkpoint:
-  path: checkpoints/tinystories_32k/final.pt
+  path: checkpoints/tinystories_v1/final.pt
 
 tokenizer:
   path: data/TinyStoriesV2.tokenizer.pkl
